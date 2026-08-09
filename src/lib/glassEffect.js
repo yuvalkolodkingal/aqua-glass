@@ -21,13 +21,23 @@ export const stats = {
     created: 0,
     destroyed: 0,
     live: 0,
+    paints: 0,
 };
+
+/**
+ * Anything add_glsl_snippet() threw. A shader that fails to build renders
+ * nothing, which is indistinguishable from "the extension does nothing" - so
+ * the self-check reports this explicitly rather than leaving it silent.
+ */
+export const buildFailures = [];
 
 /** Reset counters (called from enable()). */
 export function resetStats() {
     stats.created = 0;
     stats.destroyed = 0;
     stats.live = 0;
+    stats.paints = 0;
+    buildFailures.length = 0;
 }
 
 const DEFAULT_PARAMS = {
@@ -74,11 +84,20 @@ class AquaGlassEffect extends Shell.GLSLEffect {
      */
     vfunc_build_pipeline() {
         try {
-            // is_replace = false: our code is appended after cogl's own
-            // fragment processing, and overwrites cogl_color_out.
-            this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, DECLARATIONS, CODE, false);
+            // is_replace = TRUE: our snippet replaces cogl's generated
+            // fragment processing entirely.
+            //
+            // We do our own texture2D() lookups (refraction samples at
+            // displaced coordinates), so the default per-layer lookup is dead
+            // work whose only effect is to make the final colour depend on
+            // pipeline state we do not control. Replacing it means the shader
+            // is exactly what shader.js says it is. This is the form
+            // gnome-shell's own lightbox.js and messageList.js effects use.
+            this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, DECLARATIONS, CODE, true);
+            this._pipelineBuilt = true;
         } catch (e) {
             Log.error(e, 'build_pipeline');
+            buildFailures.push(String(e));
         }
     }
 
@@ -256,12 +275,23 @@ class AquaGlassEffect extends Shell.GLSLEffect {
     }
 
     vfunc_paint_target(node, paintContext) {
+        // Counting paints separates "the effect never ran" (actor hidden,
+        // zero-sized, culled, or the framebuffer could not be created) from
+        // "the effect ran but drew nothing" (a shader problem). Without this
+        // the two are indistinguishable from outside, and they have completely
+        // different fixes.
+        stats.paints += 1;
+
         try {
             const actor = this.get_actor();
             if (actor) {
                 const loc = this._cacheLocations();
                 const p = this._params;
                 const {origin, size} = this._computeMapping(actor);
+
+                // Kept for the self-check so the geometry the shader actually
+                // received can be inspected at runtime.
+                this._lastMapping = {origin, size, rect: p.rect, clip: p.clip};
 
                 this._set(loc.agLocalOrigin, 2, origin);
                 this._set(loc.agLocalSize, 2, size);

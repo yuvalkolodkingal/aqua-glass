@@ -29,7 +29,7 @@ import {PersistentGlassSurface, findPanel, findDock} from './lib/persistentSurfa
 import {Integrations} from './lib/integrations.js';
 import {AccentFix} from './lib/accentFix.js';
 import {SelfCheck} from './lib/selfcheck.js';
-import {capabilities, resetCapabilities} from './lib/compat.js';
+import {capabilities, resetCapabilities, shellVersion} from './lib/compat.js';
 
 export default class AquaGlassExtension extends Extension {
     enable() {
@@ -156,7 +156,30 @@ export default class AquaGlassExtension extends Extension {
         // which it does after our enable() on a fresh login.
         this._timers.oneShot(1500, () => this._rescanDock(), 'dock-rescan');
 
-        Log.info(`enabled (shell ${capabilities().blurEffect ? 'native blur' : 'shader blur'})`);
+        // Log the full capability set unconditionally, not just under debug.
+        // When a user reports "it does nothing", this line usually identifies
+        // which of the possible causes it is.
+        Log.info(
+            `enabled on shell ${shellVersion()} - ` +
+            `glsl=${caps.glslEffect} blur=${caps.blurEffect} ` +
+            `pickColor=${caps.pickColor} laters=${caps.laters}`);
+
+        // One deferred report of what actually reached the screen, so the
+        // journal alone shows whether the effect ever painted.
+        this._timers.oneShot(3000, () => {
+            const report = Log.guard('startup report', () => this._selfCheck?.collect(), null);
+            if (!report)
+                return;
+            if (report.problems.length === 0) {
+                Log.info(`rendering: ${report.effects.paints} paint calls, ` +
+                         `~${(report.framebufferBytes / 1048576).toFixed(1)} MiB framebuffers`);
+            } else {
+                Log.warn('startup self-check found problems:');
+                for (const p of report.problems)
+                    Log.warn(`  ${p}`);
+                Log.warn('Run `make doctor` for the full report.');
+            }
+        }, 'startup-report');
     }
 
     /**

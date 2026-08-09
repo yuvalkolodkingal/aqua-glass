@@ -34,11 +34,31 @@ schema-check:
 	@echo "==> Validating metadata.json"
 	@python3 -c "import json; json.load(open('$(SRC)/metadata.json'))"
 
-## Unit-test the colour science and the shader's light convention. Both
-## modules are pure JavaScript with no GI imports, so they run under plain node.
+## Unit-test the colour science, compile the GLSL for real, and run the whole
+## extension lifecycle against a mock GI layer.
 test:
-	@echo "==> Unit tests"
+	@echo "==> Colour science"
 	@node tests/run.mjs
+	@echo "==> Shader compilation"
+	@if command -v glslangValidator >/dev/null 2>&1; then \
+	  node tests/shader-compile.mjs; \
+	else \
+	  echo "  skipped (install glslang-tools to compile the shader)"; \
+	fi
+	@echo "==> Lifecycle (enable/popup/disable against mock GI)"
+	@node --import ./tests/register-hooks.mjs tests/lifecycle.mjs
+
+## Ask the running extension what it is actually doing. Use this first when
+## the glass does not appear.
+doctor:
+	@gdbus call --session --dest org.gnome.Shell \
+	  --object-path /org/gnome/Shell/Extensions/AquaGlass \
+	  --method org.gnome.Shell.Extensions.AquaGlass.SelfCheck \
+	  2>/dev/null \
+	  | sed -e "s/^('//" -e "s/',)$$//" -e 's/\\n/\n/g' \
+	  || { echo "Could not reach the extension over D-Bus."; \
+	       echo "Is it enabled?  gnome-extensions list --enabled | grep aqua-glass"; \
+	       echo "Journal:        journalctl --user -b -o cat /usr/bin/gnome-shell | grep aqua-glass"; }
 
 ## Compile the settings schema in place.
 schemas:

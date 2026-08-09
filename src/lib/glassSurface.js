@@ -388,12 +388,31 @@ export class GlassSurface {
      * @returns {object} diagnostic snapshot for the self-check
      */
     describe() {
+        let geometry = null;
+        try {
+            if (this._root) {
+                geometry = {
+                    pos: `${Math.round(this._root.x)},${Math.round(this._root.y)}`,
+                    size: `${Math.round(this._root.width)}x${Math.round(this._root.height)}`,
+                    clip: this._root.has_clip()
+                        ? this._root.get_clip().map(Math.round).join(',')
+                        : 'none',
+                    parented: !!this._root.get_parent(),
+                    opacity: this._root.opacity,
+                };
+            }
+        } catch { /* ignore */ }
+
         return {
             name: this._name,
             built: this.isBuilt,
             visible: this.visible,
             nativeBlur: !!this._blur && !!this._blur.enabled,
             bytes: this.estimatedBytes(),
+            geometry,
+            // What the shader was last handed. If the glass looks wrong, this
+            // says whether the geometry or the shader is at fault.
+            mapping: this._effect?._lastMapping ?? null,
             monitor: this._monitor
                 ? `${this._monitor.width}x${this._monitor.height}+${this._monitor.x}+${this._monitor.y}`
                 : 'none',

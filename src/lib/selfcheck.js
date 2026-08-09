@@ -23,6 +23,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Log from './logger.js';
 import {rssMiB, shellVersion, capabilities} from './compat.js';
 import {effectStats} from './glassSurface.js';
+import {buildFailures} from './glassEffect.js';
 
 const DBUS_NAME = 'org.gnome.Shell.Extensions.AquaGlass';
 const DBUS_PATH = '/org/gnome/Shell/Extensions/AquaGlass';
@@ -77,6 +78,10 @@ export class SelfCheck {
                 persistentEffects: ctx.persistent
                     ? ctx.persistent.filter(p => p.isActive).length
                     : 0,
+                // Zero paints means the effect never ran at all - a completely
+                // different fault from "ran but drew nothing".
+                paints: effects.paints,
+                shaderBuildErrors: [...buildFailures],
             },
 
             popups: ctx.popupManager ? ctx.popupManager.describe() : null,
@@ -121,6 +126,32 @@ export class SelfCheck {
      */
     _problems(r) {
         const problems = [];
+
+        if (r.effects.shaderBuildErrors.length > 0) {
+            problems.push(
+                `The GLSL snippet failed to attach: ${r.effects.shaderBuildErrors.join('; ')}. ` +
+                'Nothing will render.');
+        }
+
+        if (!r.capabilities.glslEffect) {
+            problems.push(
+                'Shell.GLSLEffect is unavailable, so no glass can be drawn at all.');
+        }
+
+        if (r.effects.live > 0 && r.effects.paints === 0) {
+            problems.push(
+                'The glass effect has never been painted. The actor is present but ' +
+                'is not reaching the screen - it is hidden, zero-sized, parented ' +
+                'somewhere that clips it away, or its framebuffer could not be ' +
+                'created. This is NOT a shader problem.');
+        }
+
+        const anyVisible = (r.persistent || []).some(p => p.glass?.visible);
+        if (r.effects.paints > 0 && r.persistent?.length > 0 && !anyVisible) {
+            problems.push(
+                'The effect is painting but no persistent surface reports a visible ' +
+                'glass actor.');
+        }
 
         if (r.effects.sharedPopupEffects > 1) {
             problems.push(
@@ -174,11 +205,38 @@ export class SelfCheck {
         lines.push(`gnome-shell RSS  : ${r.rssMiB} MiB`);
         lines.push(`framebuffers     : ~${(r.framebufferBytes / (1024 * 1024)).toFixed(1)} MiB`);
         lines.push('');
+        lines.push('Capabilities');
+        for (const [k, v] of Object.entries(r.capabilities))
+            lines.push(`  ${k.padEnd(20)} ${v}`);
+        lines.push('');
+
         lines.push('Effects');
         lines.push(`  shared popup effects : ${r.effects.sharedPopupEffects}   (must be 1)`);
         lines.push(`  persistent effects   : ${r.effects.persistentEffects}`);
         lines.push(`  created / destroyed  : ${r.effects.created} / ${r.effects.destroyed}`);
         lines.push(`  live                 : ${r.effects.live}`);
+        lines.push(`  paint calls          : ${r.effects.paints}   (0 means it never rendered)`);
+        if (r.effects.shaderBuildErrors.length > 0)
+            lines.push(`  SHADER BUILD ERRORS  : ${r.effects.shaderBuildErrors.join('; ')}`);
+        lines.push('');
+
+        for (const p of r.persistent) {
+            const g = p.glass || {};
+            lines.push(`Surface "${p.name}"`);
+            lines.push(`  active=${p.active} visible=${g.visible} nativeBlur=${g.nativeBlur}`);
+            if (g.geometry) {
+                lines.push(`  actor  pos=${g.geometry.pos} size=${g.geometry.size} ` +
+                           `clip=${g.geometry.clip} parented=${g.geometry.parented} ` +
+                           `opacity=${g.geometry.opacity}`);
+            }
+            if (g.mapping) {
+                lines.push(`  shader origin=[${g.mapping.origin.map(Math.round)}] ` +
+                           `size=[${g.mapping.size.map(Math.round)}] ` +
+                           `rect=[${g.mapping.rect.map(Math.round)}]`);
+            } else {
+                lines.push('  shader never received geometry (effect not painted)');
+            }
+        }
         lines.push('');
 
         if (r.popups) {
