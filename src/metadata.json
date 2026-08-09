@@ -1,0 +1,11 @@
+{
+  "uuid": "aqua-glass@yuvalkolodkingal.github.io",
+  "name": "Aqua Glass",
+  "description": "An Apple-style Liquid Glass material for the GNOME Shell UI: refractive, specular, adaptive glass behind the panel, menus, Quick Settings, notifications, OSD, switchers and the dock. Replaces Blur My Shell and integrates with Dash to Dock.",
+  "shell-version": ["48", "49", "50"],
+  "session-modes": ["user"],
+  "url": "https://github.com/yuvalkolodkingal/aqua-glass",
+  "settings-schema": "org.gnome.shell.extensions.aqua-glass",
+  "gettext-domain": "aqua-glass",
+  "version-name": "1.0.0"
+}
