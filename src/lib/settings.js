@@ -3,7 +3,7 @@
 import * as Log from './logger.js';
 import {parse} from './color.js';
 import {lightVector} from './shader.js';
-import {prefersDark} from './compat.js';
+import {prefersDark, highContrast} from './compat.js';
 
 /**
  * The automatic tints, chosen to sit where Apple's dark/light glass sits:
@@ -11,7 +11,10 @@ import {prefersDark} from './compat.js';
  * light-mode glass is white.
  */
 export const AUTO_TINT_DARK = {r: 0.10, g: 0.10, b: 0.12};
-export const AUTO_TINT_LIGHT = {r: 1.0, g: 1.0, b: 1.0};
+// Not pure white: full white at these opacities is the milky-frost defect
+// waiting for anyone who selects prefer-light. Apple's light glass is a
+// slightly warm off-white.
+export const AUTO_TINT_LIGHT = {r: 0.961, g: 0.961, b: 0.968};
 
 /** Keys that change the material and so require a repaint of every surface. */
 export const MATERIAL_KEYS = [
@@ -86,6 +89,21 @@ export class MaterialParams {
         this.nativeBlur = settings.get_boolean('native-blur');
         this.baseOpacity = settings.get_double('base-opacity');
         this.refraction3d = settings.get_boolean('refraction-3d');
+
+        // Accessibility overrides everything aesthetic. When the desktop asks
+        // for high contrast, the glass becomes a near-opaque plain surface
+        // with no blur and no decorative light - which is exactly Apple's own
+        // reduce-transparency fallback for this material.
+        this.highContrast = highContrast();
+        if (this.highContrast) {
+            this.tint = [0.114, 0.114, 0.122, this.tint[3]];
+            this.baseOpacity = 0.95;
+            this.blurSigma = 0;
+            this.sheen = 0;
+            this.fresnel = 0;
+            this.specularEnabled = false;
+            this.refraction3d = false;
+        }
     }
 
     /**

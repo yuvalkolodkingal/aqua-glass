@@ -57,6 +57,7 @@ uniform vec2  agSheenFresnel;  // x = sheen intensity, y = fresnel/rim intensity
 uniform vec3  agShadow;        // x = opacity, y = softness radius, z = offset
 uniform float agFallbackBlur;  // > 0 => blur in-shader with this radius (px)
 uniform float agUseBackdrop;   // 1 = refract our own backdrop, 0 = highlights only
+uniform float agBackLum;       // measured backdrop luminance 0..1, for attenuation
 
 // Signed distance to a rounded rectangle centred on the origin.
 // Negative inside. (Standard formulation; see Inigo Quilez, "distance
@@ -233,6 +234,13 @@ export const CODE = `
 
         float agLightSum = agSheen + agSpecular + agRim;
 
+        // The light must know what it is landing on. Additive white over a
+        // bright backdrop is white-on-white - the material has to QUIETEN
+        // over bright content, which is what Apple's does. agBackLum comes
+        // from the same asynchronous sampling that drives adaptive text, so
+        // nothing here ever blocks the paint path.
+        agLightSum *= (1.0 - 0.7 * clamp(agBackLum, 0.0, 1.0));
+
         if (agUseBackdrop > 0.5) {
             agColour = agBack + vec3(agLightSum);
             agAlpha = agCoverage;
@@ -289,6 +297,7 @@ export const UNIFORMS = [
     'agShadow',
     'agFallbackBlur',
     'agUseBackdrop',
+    'agBackLum',
 ];
 
 /**

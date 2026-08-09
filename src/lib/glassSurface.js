@@ -53,6 +53,8 @@ export class GlassSurface {
         this._monitor = null;
         this._params = null;
         this._refraction = false;
+        this._backLum = 0;
+        this._lastRadius = null;
     }
 
     get name() {
@@ -273,7 +275,15 @@ export class GlassSurface {
 
         // A floor under the tint alpha. Without it a "subtle" setting plus a
         // blur that did not load leaves text floating on bare wallpaper.
-        const alpha = m ? Math.max(0.10, Math.min(0.75, m.baseOpacity)) : 0.38;
+        // Darkness that adapts beats darkness that is merely higher: over a
+        // bright backdrop the dark glass deepens by up to +0.12 so white
+        // content behind it can never win. Light glass runs thinner overall.
+        let alpha = m ? m.baseOpacity : 0.45;
+        if (m && !m.isDark)
+            alpha *= 0.6;
+        if (m && m.isDark)
+            alpha += 0.12 * this._backLum;
+        alpha = Math.max(0.10, Math.min(0.95, alpha));
 
         const shadowAlpha = m && m.shadowEnabled ? m.shadowOpacity : 0;
         const shadowBlur = m ? m.shadowRadius : 32;
@@ -322,6 +332,7 @@ export class GlassSurface {
             // Layer 1 sits exactly on the surface.
             this._base.set_position(localX, localY);
             this._base.set_size(rect.width, rect.height);
+            this._lastRadius = cornerRadius;
             this._base.set_style(this._baseStyle(cornerRadius));
 
             // Layer 2 keeps the monitor-sized frame the shader's coordinate
@@ -370,6 +381,34 @@ export class GlassSurface {
         } catch (e) {
             Log.error(e, `GlassSurface(${this._name}).retarget`);
             return false;
+        }
+    }
+
+    /**
+     * Feed the measured backdrop luminance into the material.
+     *
+     * Comes from the same asynchronous Shell.Screenshot sampling that drives
+     * adaptive text, so it costs nothing extra and never touches the paint
+     * path. The base deepens over bright content and the shader's additive
+     * light quietens - the material dims itself over bright backdrops instead
+     * of adding white to white.
+     *
+     * @param {number} luminance relative luminance of the backdrop, 0..1
+     */
+    setBackdropLuminance(luminance) {
+        if (!this.isBuilt || !Number.isFinite(luminance))
+            return;
+        const clamped = Math.max(0, Math.min(1, luminance));
+        if (Math.abs(clamped - this._backLum) < 0.02)
+            return;
+        this._backLum = clamped;
+
+        try {
+            this._effect?.setParams({backLum: clamped});
+            if (this._base && this._params && this._lastRadius !== null)
+                this._base.set_style(this._baseStyle(this._lastRadius));
+        } catch (e) {
+            Log.error(e, `GlassSurface(${this._name}).setBackdropLuminance`);
         }
     }
 

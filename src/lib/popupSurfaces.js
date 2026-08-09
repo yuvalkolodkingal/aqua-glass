@@ -27,7 +27,7 @@ import {isAlive, monitorForRect, topLevelUnder} from './compat.js';
 import {TransparencyGroup, themeCornerRadius} from './transparency.js';
 import {AdaptiveText} from './adaptiveText.js';
 import {ColorSampler, predictedLuminance} from './sampler.js';
-import {decideTextMode, idealThreshold} from './color.js';
+import {decideTextMode, idealThreshold, medianLuminance} from './color.js';
 
 /**
  * How a paint class maps to a surface, its settings key and its default
@@ -348,12 +348,9 @@ export class PopupGlassManager {
         this._laters.cancel(entry.hideLater);
         entry.hideLater = null;
 
-        // Only one popup can own the glass. If another has it, take it away -
-        // it keeps its place on the stack and gets it back when we go.
-        const previous = this.currentOwner;
-        if (previous && previous !== entry)
-            this._suspend(previous);
-
+        // Validate BEFORE suspending the current owner: bailing out after the
+        // suspend would strip the previous popup's glass and give it back its
+        // opaque background for nothing.
         const rect = this._surfaceRect(entry);
         if (!rect)
             return;
@@ -361,6 +358,12 @@ export class PopupGlassManager {
         const monitor = monitorForRect(rect);
         if (!monitor)
             return;
+
+        // Only one popup can own the glass. If another has it, take it away -
+        // it keeps its place on the stack and gets it back when we go.
+        const previous = this.currentOwner;
+        if (previous && previous !== entry)
+            this._suspend(previous);
 
         const material = this._settings.material();
         const radius = material.cornerRadiusSetting >= 0
@@ -704,6 +707,11 @@ export class PopupGlassManager {
         this._sampler.sample(points, samples => {
             if (!entry.attached || !this._isOnScreen(entry))
                 return;
+
+            // The raw backdrop luminance also drives the material: the base
+            // deepens and the additive light quietens over bright content.
+            if (samples && samples.length > 0)
+                this._glass.setBackdropLuminance(medianLuminance(samples));
 
             let mode;
             if (!samples || samples.length === 0) {

@@ -29,7 +29,7 @@ import {PersistentGlassSurface, findPanel, findDock} from './lib/persistentSurfa
 import {Integrations} from './lib/integrations.js';
 import {AccentFix} from './lib/accentFix.js';
 import {SelfCheck} from './lib/selfcheck.js';
-import {capabilities, resetCapabilities, shellVersion} from './lib/compat.js';
+import {capabilities, resetCapabilities, shellVersion, a11yInterfaceSettings} from './lib/compat.js';
 
 export default class AquaGlassExtension extends Extension {
     enable() {
@@ -228,6 +228,19 @@ export default class AquaGlassExtension extends Extension {
         if (Main.extensionManager) {
             this._signals.connect(Main.extensionManager, 'extension-state-changed',
                 () => this._rescanDock(), 'global');
+        }
+
+        // High contrast overrides every aesthetic choice; re-apply the
+        // material the moment it flips.
+        const a11y = a11yInterfaceSettings();
+        if (a11y) {
+            this._signals.connect(a11y, 'changed::high-contrast', () => {
+                const material = this._settings.material();
+                this._sharedGlass.setMaterial(material);
+                for (const surface of this._persistent)
+                    surface.refresh();
+                this._popupManager.refresh();
+            }, 'global');
         }
 
         // Accent colour and theme changes invalidate our generated stylesheet

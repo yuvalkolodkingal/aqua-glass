@@ -19,6 +19,7 @@ import * as Log from './logger.js';
 import {ACCENT_PALETTE} from './color.js';
 
 let _capabilities = null;
+let _a11ySettings;
 
 /**
  * @returns {number} the shell major version, e.g. 48
@@ -101,6 +102,31 @@ export function capabilities() {
 /** Forget cached capability probes (used by disable()). */
 export function resetCapabilities() {
     _capabilities = null;
+    _a11ySettings = undefined;
+}
+
+/**
+ * The desktop's a11y interface settings, or null if the schema is absent.
+ *
+ * @returns {Gio.Settings|null} cached settings object
+ */
+export function a11yInterfaceSettings() {
+    if (_a11ySettings === undefined)
+        _a11ySettings = safeSettings('org.gnome.desktop.a11y.interface');
+    return _a11ySettings;
+}
+
+/**
+ * Has the user asked the desktop for high contrast?
+ *
+ * @returns {boolean} true if decorative transparency should be dropped
+ */
+export function highContrast() {
+    try {
+        return !!a11yInterfaceSettings()?.get_boolean('high-contrast');
+    } catch {
+        return false;
+    }
 }
 
 /**

@@ -25,7 +25,7 @@ import {Throttle} from './trackers.js';
 import {TransparencyGroup, themeCornerRadius} from './transparency.js';
 import {AdaptiveText} from './adaptiveText.js';
 import {ColorSampler, predictedLuminance} from './sampler.js';
-import {decideTextMode, idealThreshold} from './color.js';
+import {decideTextMode, idealThreshold, medianLuminance} from './color.js';
 
 /**
  * One always-visible glass surface.
@@ -297,6 +297,11 @@ export class PersistentGlassSurface {
         this._sampler.sample(points, samples => {
             if (!this._active)
                 return;
+
+            // Feed the material too - see popupSurfaces for the reasoning.
+            if (samples && samples.length > 0)
+                this._glass.setBackdropLuminance(medianLuminance(samples));
+
             let mode;
             if (!samples || samples.length === 0) {
                 mode = this._textMode || 'light';

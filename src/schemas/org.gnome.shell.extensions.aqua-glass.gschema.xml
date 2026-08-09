@@ -110,7 +110,7 @@
       <summary>Corner radius in pixels; -1 reads the radius from the surface's theme node</summary>
     </key>
     <key name="base-opacity" type="d">
-      <default>0.38</default>
+      <default>0.45</default>
       <range min="0.0" max="1.0"/>
       <summary>Opacity of the glass surface itself, over the blurred backdrop</summary>
       <description>Kept above a floor at runtime so a surface is never completely invisible.</description>
