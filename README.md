@@ -18,19 +18,48 @@ both Blur My Shell and Dash to Dock rather than stacking effects on top of them.
 
 ## Install
 
+One command:
+
 ```sh
-./install.sh
-# log out and back in (Wayland cannot restart the shell in place)
+curl -fsSL https://raw.githubusercontent.com/yuvalkolodkingal/aqua-glass/refs/heads/main/web-install.sh | bash
+```
+
+Then log out and back in — Wayland cannot restart the shell in place — and:
+
+```sh
 gnome-extensions enable aqua-glass@yuvalkolodkingal.github.io
+```
+
+**Uninstall**, including reverting every change made to other extensions:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/yuvalkolodkingal/aqua-glass/refs/heads/main/uninstall.sh | bash
 ```
 
 Preferences: `gnome-extensions prefs aqua-glass@yuvalkolodkingal.github.io`
 
-**Remove everything, including changes made to other extensions:**
+<details>
+<summary>From a clone, or installing a specific branch</summary>
 
 ```sh
-./uninstall.sh
+git clone https://github.com/yuvalkolodkingal/aqua-glass
+cd aqua-glass && ./install.sh      # then enable as above
+./uninstall.sh                     # to remove
 ```
+
+The network installer takes environment overrides:
+
+```sh
+# install a branch, tag or commit other than main
+curl -fsSL .../web-install.sh | AQUA_GLASS_REF=some-branch bash
+
+# install without enabling
+curl -fsSL .../web-install.sh | AQUA_GLASS_NO_ENABLE=1 bash
+```
+
+Requires `curl`, `tar` and `glib-compile-schemas` (Debian/Ubuntu:
+`libglib2.0-bin`; Fedora: `glib2`).
+</details>
 
 ---
 
