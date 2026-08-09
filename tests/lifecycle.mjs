@@ -98,6 +98,12 @@ if (panelGlass) {
     check('the base layer paints a visible translucent background',
         !!base && /background-color:\s*rgba\([^)]*0\.\d+\)/.test(base.get_style() || ''),
         base ? `style=${base.get_style()}` : 'n/a');
+    // The mock desktop is in the default (dark-chrome) scheme, so the auto
+    // tint must resolve DARK - a milky white surface on a dark desktop is the
+    // defect this guards against.
+    check('auto tint resolves dark on a dark desktop',
+        !!base && /background-color:\s*rgba\(2[0-9], 2[0-9], 3[0-9],/.test(base.get_style() || ''),
+        base ? `style=${base.get_style()}` : 'n/a');
     check('the base layer has rounded corners and a rim',
         !!base && /border-radius/.test(base.get_style() || '') &&
         /border:\s*1px/.test(base.get_style() || ''));

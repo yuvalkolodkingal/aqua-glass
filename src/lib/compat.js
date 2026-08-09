@@ -155,6 +155,47 @@ export function isExtensionActive(uuid) {
 }
 
 /**
+ * The compiled-schema directory of another installed extension.
+ *
+ * Extensions ship their gschemas.compiled inside their own directory, NOT in
+ * the system default schema source - so looking a schema up in the default
+ * source alone silently finds nothing. (extensionSystem.js:388 gives every
+ * extension record a `path`.)
+ *
+ * @param {string} uuid extension uuid
+ * @returns {string|null} absolute path of its schemas/ dir, or null
+ */
+export function extensionSchemaDir(uuid) {
+    const ext = lookupExtension(uuid);
+    if (!ext || !ext.path)
+        return null;
+    try {
+        const dir = GLib.build_filenamev([ext.path, 'schemas']);
+        return GLib.file_test(dir, GLib.FileTest.IS_DIR) ? dir : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Is the desktop currently in dark mode?
+ *
+ * StSystemColorScheme: DEFAULT=0, PREFER_DARK=1, PREFER_LIGHT=2. The shell's
+ * own chrome is dark in DEFAULT too, so only an explicit PREFER_LIGHT counts
+ * as light here.
+ *
+ * @returns {boolean} true if glass should be dark
+ */
+export function prefersDark() {
+    try {
+        const scheme = St.Settings.get().color_scheme;
+        return scheme !== 2;
+    } catch {
+        return true;
+    }
+}
+
+/**
  * Open a GSettings object for another extension's schema, if that schema is
  * actually installed.
  *

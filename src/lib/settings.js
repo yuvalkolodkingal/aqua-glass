@@ -3,6 +3,15 @@
 import * as Log from './logger.js';
 import {parse} from './color.js';
 import {lightVector} from './shader.js';
+import {prefersDark} from './compat.js';
+
+/**
+ * The automatic tints, chosen to sit where Apple's dark/light glass sits:
+ * dark-mode glass is a deep neutral (not black - black kills the backdrop),
+ * light-mode glass is white.
+ */
+export const AUTO_TINT_DARK = {r: 0.10, g: 0.10, b: 0.12};
+export const AUTO_TINT_LIGHT = {r: 1.0, g: 1.0, b: 1.0};
 
 /** Keys that change the material and so require a repaint of every surface. */
 export const MATERIAL_KEYS = [
@@ -34,7 +43,15 @@ export const TEXT_KEYS = [
  */
 export class MaterialParams {
     constructor(settings) {
-        const tint = parse(settings.get_string('tint-color')) || {r: 1, g: 1, b: 1};
+        // 'auto' (the default) follows the desktop colour scheme, which is
+        // what Apple's material does: dark translucent glass in dark mode,
+        // white frost in light mode. A milky white surface on a dark desktop
+        // is the single thing that most says "not macOS".
+        this.isDark = prefersDark();
+        const tintSetting = settings.get_string('tint-color').trim().toLowerCase();
+        const tint = tintSetting === 'auto' || tintSetting === ''
+            ? (this.isDark ? AUTO_TINT_DARK : AUTO_TINT_LIGHT)
+            : (parse(tintSetting) || (this.isDark ? AUTO_TINT_DARK : AUTO_TINT_LIGHT));
 
         this.blurSigma = settings.get_int('blur-sigma');
         this.tint = [tint.r, tint.g, tint.b, settings.get_double('tint-strength')];

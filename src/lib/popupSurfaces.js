@@ -18,6 +18,8 @@
 // 48 -> 49 animation rework (49 added a scale animation and flipped the close
 // translation sign) without any version branching.
 
+import Clutter from 'gi://Clutter';
+
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import * as Log from './logger.js';
@@ -282,6 +284,17 @@ export class PopupGlassManager {
         // + EASE_OUT_QUAD + flipped translation) needs no special case.
         entry.signalKeys.push(this._signals.connect(actor, 'notify::opacity',
             () => this._syncOpacity(entry), 'popup-lifecycle'));
+
+        // Menus change size while open - Quick Settings grows when a toggle
+        // sub-menu expands, ordinary menus when a submenu unrolls. Track the
+        // painting actor's allocation so the glass follows.
+        if (isAlive(descriptor.paintActor)) {
+            entry.signalKeys.push(this._signals.connect(
+                descriptor.paintActor, 'notify::allocation', () => {
+                    if (entry.attached && this._isOnScreen(entry))
+                        this._refreshGeometry(entry);
+                }, 'popup-lifecycle'));
+        }
 
         this._evaluate(entry);
     }
@@ -566,11 +579,80 @@ export class PopupGlassManager {
             const [w, h] = target.get_transformed_size();
             if (!(w > 0) || !(h > 0) || !Number.isFinite(x) || !Number.isFinite(y))
                 return null;
-            return {x, y, width: w, height: h};
+
+            const rect = {x, y, width: w, height: h};
+
+            // Quick Settings only: QuickSettingsLayout.vfunc_get_preferred_height
+            // (quickSettings.js:658-674) ALWAYS adds the _overlay's preferred
+            // height - space reserved for quick-toggle sub-menus - so the
+            // .quick-settings box is permanently taller than its visible
+            // content. Glass sized to the box shows as a bare band hanging
+            // below the last row. Clamp to the visible content instead.
+            if (entry.descriptor.id === 'quick-settings')
+                this._clampToVisibleContent(rect, target);
+
+            return rect;
         } catch (e) {
             Log.debug(`surfaceRect: ${e}`);
             return null;
         }
+    }
+
+    /**
+     * Shrink a rect's height to the bottom of its deepest visible content.
+     *
+     * Walks a few levels of the paint actor's children and finds the lowest
+     * bottom edge among visible, allocated descendants - skipping every
+     * Clutter.Clone, because the reserved-space placeholder inside the Quick
+     * Settings grid IS a Clone (of the overlay) and is exactly the thing we
+     * must not measure. The actor's own top padding is mirrored below the
+     * content so the glass keeps a symmetric inset.
+     *
+     * When a quick-toggle sub-menu opens, its actor becomes a visible
+     * non-Clone descendant, the union grows, and the periodic geometry
+     * refresh extends the glass over it.
+     *
+     * @param {object} rect rect to clamp, mutated in place
+     * @param {Clutter.Actor} root the paint actor
+     */
+    _clampToVisibleContent(rect, root) {
+        let maxBottom = -Infinity;
+        let minTop = Infinity;
+
+        const visit = (actor, depth) => {
+            let children = [];
+            try {
+                children = actor.get_children();
+            } catch {
+                return;
+            }
+            for (const child of children) {
+                try {
+                    if (!child.visible || child instanceof Clutter.Clone)
+                        continue;
+                    const [, cy] = child.get_transformed_position();
+                    const [, ch] = child.get_transformed_size();
+                    if (ch > 0 && Number.isFinite(cy)) {
+                        minTop = Math.min(minTop, cy);
+                        maxBottom = Math.max(maxBottom, cy + ch);
+                    }
+                    if (depth < 3)
+                        visit(child, depth + 1);
+                } catch {
+                    // skip this child
+                }
+            }
+        };
+
+        Log.guard('clampToVisibleContent', () => visit(root, 0));
+
+        if (!Number.isFinite(maxBottom) || !Number.isFinite(minTop))
+            return;
+
+        const topPadding = Math.max(0, minTop - rect.y);
+        const clamped = (maxBottom + topPadding) - rect.y;
+        if (clamped > 40 && clamped < rect.height)
+            rect.height = clamped;
     }
 
     _syncOpacity(entry) {

@@ -71,8 +71,8 @@
       <summary>Gaussian sigma of the backdrop blur, in pixels</summary>
     </key>
     <key name="tint-color" type="s">
-      <default>'#ffffff'</default>
-      <summary>Glass tint colour (hex)</summary>
+      <default>'auto'</default>
+      <summary>Glass tint colour: 'auto' follows the desktop dark/light scheme, or a hex colour</summary>
     </key>
     <key name="tint-strength" type="d">
       <default>0.10</default>
@@ -110,7 +110,7 @@
       <summary>Corner radius in pixels; -1 reads the radius from the surface's theme node</summary>
     </key>
     <key name="base-opacity" type="d">
-      <default>0.22</default>
+      <default>0.38</default>
       <range min="0.0" max="1.0"/>
       <summary>Opacity of the glass surface itself, over the blurred backdrop</summary>
       <description>Kept above a floor at runtime so a surface is never completely invisible.</description>
@@ -125,7 +125,7 @@
       <summary>Specular highlights (off makes glass read as flat plastic)</summary>
     </key>
     <key name="specular-intensity" type="d">
-      <default>0.55</default>
+      <default>0.40</default>
       <range min="0.0" max="1.0"/>
       <summary>Specular highlight intensity</summary>
     </key>
@@ -140,12 +140,12 @@
       <summary>Edge-only chromatic aberration amount</summary>
     </key>
     <key name="sheen-intensity" type="d">
-      <default>0.35</default>
+      <default>0.14</default>
       <range min="0.0" max="1.0"/>
       <summary>Directional sheen gradient intensity</summary>
     </key>
     <key name="fresnel-intensity" type="d">
-      <default>0.45</default>
+      <default>0.25</default>
       <range min="0.0" max="1.0"/>
       <summary>Fresnel rim-light intensity</summary>
     </key>

@@ -151,7 +151,9 @@ export default class AquaGlassPreferences extends ExtensionPreferences {
         this._doubleRow(base, settings, 'tint-strength', 'Tint strength',
             null, 0, 1);
 
-        const tintRow = new Adw.EntryRow({title: 'Tint colour (hex)'});
+        const tintRow = new Adw.EntryRow({
+            title: 'Tint colour ("auto" follows dark/light mode, or a hex colour)',
+        });
         base.add(tintRow);
         settings.bind('tint-color', tintRow, 'text', Gio.SettingsBindFlags.DEFAULT);
 

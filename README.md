@@ -93,7 +93,9 @@ The material is built from two layers, and the split is deliberate:
 
 **1. The surface** — a `St.Widget` carrying `Shell.BlurEffect` in **BACKGROUND**
 mode plus a translucent tint, rounded corners, a hairline rim and a soft drop
-shadow. BACKGROUND blur reads the real framebuffer behind the actor, so it needs
+shadow. The tint follows the desktop colour scheme by default (`auto`): deep
+neutral dark glass in dark mode — with the backdrop dimmed slightly, as Apple's
+dark material does — and white frost in light mode. BACKGROUND blur reads the real framebuffer behind the actor, so it needs
 no copy of the screen, no coordinate arithmetic and no framebuffer of our own.
 This layer alone is already a credible frosted-glass surface.
 

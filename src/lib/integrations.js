@@ -14,7 +14,7 @@
 import Gio from 'gi://Gio';
 
 import * as Log from './logger.js';
-import {safeSettings, isExtensionActive, notify} from './compat.js';
+import {safeSettings, isExtensionActive, extensionSchemaDir, notify} from './compat.js';
 
 export const BMS_UUID = 'blur-my-shell@aunetx';
 export const DTD_UUID = 'dash-to-dock@micxgx.gmail.com';
@@ -67,7 +67,7 @@ export class Integrations {
      * @returns {string[]} child schema names with blur enabled
      */
     overlappingBmsComponents() {
-        const root = safeSettings(BMS_SCHEMA);
+        const root = safeSettings(BMS_SCHEMA, extensionSchemaDir(BMS_UUID));
         if (!root)
             return [];
 
@@ -131,7 +131,7 @@ export class Integrations {
      * @param {string[]} components child schema names
      */
     disableBmsComponents(components) {
-        const root = safeSettings(BMS_SCHEMA);
+        const root = safeSettings(BMS_SCHEMA, extensionSchemaDir(BMS_UUID));
         if (!root)
             return;
 
@@ -165,7 +165,10 @@ export class Integrations {
         if (!Integrations.dashToDockActive())
             return false;
 
-        const dtd = safeSettings(DTD_SCHEMA);
+        // DtD ships its compiled schema inside its own extension directory;
+        // the default schema source knows nothing about it, and without the
+        // directory every one of these writes silently did nothing.
+        const dtd = safeSettings(DTD_SCHEMA, extensionSchemaDir(DTD_UUID));
         if (!dtd)
             return false;
 
@@ -206,7 +209,7 @@ export class Integrations {
         if (Object.keys(backup).length === 0)
             return;
 
-        const root = safeSettings(BMS_SCHEMA);
+        const root = safeSettings(BMS_SCHEMA, extensionSchemaDir(BMS_UUID));
         if (root) {
             for (const [name, value] of Object.entries(backup)) {
                 try {
@@ -226,7 +229,7 @@ export class Integrations {
         if (Object.keys(backup).length === 0)
             return;
 
-        const dtd = safeSettings(DTD_SCHEMA);
+        const dtd = safeSettings(DTD_SCHEMA, extensionSchemaDir(DTD_UUID));
         if (dtd) {
             for (const [key, value] of Object.entries(backup)) {
                 const spec = DTD_OVERRIDES[key];

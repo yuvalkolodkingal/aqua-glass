@@ -68,6 +68,11 @@ export default {
         return 0;
     },
 
+    file_test() {
+        return false;
+    },
+    FileTest: {IS_DIR: 4},
+
     file_set_contents() {
         return true;
     },

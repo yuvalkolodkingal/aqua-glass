@@ -250,6 +250,9 @@ export class GlassSurface {
                 this._blur.enabled = sigma > 0;
                 if (sigma > 0)
                     this._blur.radius = sigma;
+                // Dark glass darkens what is behind it a little, exactly as
+                // Apple's dark material does; light glass leaves it alone.
+                this._blur.brightness = material.isDark ? 0.82 : 1.0;
             } catch (e) {
                 Log.error(e, 'set blur radius');
             }
@@ -270,17 +273,20 @@ export class GlassSurface {
 
         // A floor under the tint alpha. Without it a "subtle" setting plus a
         // blur that did not load leaves text floating on bare wallpaper.
-        const alpha = m ? Math.max(0.10, Math.min(0.55, m.baseOpacity)) : 0.22;
+        const alpha = m ? Math.max(0.10, Math.min(0.75, m.baseOpacity)) : 0.38;
 
         const shadowAlpha = m && m.shadowEnabled ? m.shadowOpacity : 0;
         const shadowBlur = m ? m.shadowRadius : 32;
         const shadowY = m ? Math.round(m.shadowOffset * 0.6) : 6;
 
+        // On dark glass the rim is a faint light catch; on light glass a
+        // slightly stronger one - both hairline, never a drawn outline.
+        const rimAlpha = m && m.isDark ? 0.12 : 0.22;
+
         return [
             `background-color: rgba(${to255(r)}, ${to255(g)}, ${to255(b)}, ${alpha.toFixed(3)});`,
             `border-radius: ${Math.max(0, Math.round(radius))}px;`,
-            // A hairline lighter edge is what reads as a physical rim.
-            'border: 1px solid rgba(255, 255, 255, 0.16);',
+            `border: 1px solid rgba(255, 255, 255, ${rimAlpha});`,
             shadowAlpha > 0
                 ? `box-shadow: 0 ${shadowY}px ${Math.round(shadowBlur)}px rgba(0, 0, 0, ${shadowAlpha.toFixed(3)});`
                 : '',
