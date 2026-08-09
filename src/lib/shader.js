@@ -56,6 +56,7 @@ uniform vec4  agLight;         // xy = unit vector toward light, z = specular, w
 uniform vec2  agSheenFresnel;  // x = sheen intensity, y = fresnel/rim intensity
 uniform vec3  agShadow;        // x = opacity, y = softness radius, z = offset
 uniform float agFallbackBlur;  // > 0 => blur in-shader with this radius (px)
+uniform float agUseBackdrop;   // 1 = refract our own backdrop, 0 = highlights only
 
 // Signed distance to a rounded rectangle centred on the origin.
 // Negative inside. (Standard formulation; see Inigo Quilez, "distance
@@ -160,16 +161,25 @@ export const CODE = `
         vec2 agClipMin = agClip.xy;
         vec2 agClipMax = agClip.xy + agClip.zw;
 
-        vec2 agSamplePos = clamp(agP + agOffset, agClipMin, agClipMax);
-        vec4 agTexel0 = agFetch((agSamplePos - agLocalOrigin) * agTexel, agTexel, agFallbackBlur);
-        vec3 agBack = agUnpremultiply(agTexel0);
+        // agUseBackdrop = 0 means the blurred backdrop is being supplied by a
+        // separate layer underneath us, and this pass contributes only the
+        // light: specular, rim and sheen, composited additively. That path
+        // touches no texture at all, so it cannot be blanked by a backdrop
+        // that failed to arrive - which is the difference between a material
+        // that degrades and one that disappears.
+        vec3 agBack = vec3(0.0);
+        if (agUseBackdrop > 0.5) {
+            vec2 agSamplePos = clamp(agP + agOffset, agClipMin, agClipMax);
+            vec4 agTexel0 = agFetch((agSamplePos - agLocalOrigin) * agTexel, agTexel, agFallbackBlur);
+            agBack = agUnpremultiply(agTexel0);
+        }
 
         // ---- chromatic aberration, edge only -------------------------------
         // Dispersion is proportional to how steeply the ray is bent, so it is
         // confined to the bevel by construction; agEdge fades it out further so
         // it never tints the flat centre.
         float agEdge = 1.0 - agT;
-        if (agRefr.z > 0.0 && agEdge > 0.002) {
+        if (agUseBackdrop > 0.5 && agRefr.z > 0.0 && agEdge > 0.002) {
             float agDisp = agRefr.z * 0.06 * agEdge;
 
             vec3 agBentR = refract(agIncident, agN, 1.0 / max(agRefr.x - agDisp, 1.0001));
@@ -189,10 +199,12 @@ export const CODE = `
         }
 
         // ---- grade and tint ------------------------------------------------
-        float agLum = dot(agBack, vec3(0.2126, 0.7152, 0.0722));
-        agBack = mix(vec3(agLum), agBack, agGrade.x);
-        agBack *= agGrade.y;
-        agBack = mix(agBack, agTint.rgb, agTint.a);
+        if (agUseBackdrop > 0.5) {
+            float agLum = dot(agBack, vec3(0.2126, 0.7152, 0.0722));
+            agBack = mix(vec3(agLum), agBack, agGrade.x);
+            agBack *= agGrade.y;
+            agBack = mix(agBack, agTint.rgb, agTint.a);
+        }
 
         // ---- specular ------------------------------------------------------
         // Blinn-Phong against the bevel normal. Masked to the bevel: in the
@@ -219,8 +231,19 @@ export const CODE = `
         float agGradient = clamp(0.5 + dot(agNorm - vec2(0.5), agLightDir), 0.0, 1.0);
         float agSheen = agSheenFresnel.x * pow(agGradient, 2.2);
 
-        agColour = agBack + vec3(agSheen + agSpecular + agRim);
-        agAlpha = agCoverage;
+        float agLightSum = agSheen + agSpecular + agRim;
+
+        if (agUseBackdrop > 0.5) {
+            agColour = agBack + vec3(agLightSum);
+            agAlpha = agCoverage;
+        } else {
+            // Highlights-only: white light at the strength of the material,
+            // composited over the blurred backdrop drawn by the layer below.
+            // Nothing here is opaque, so a failure degrades to "no highlight"
+            // rather than "no surface".
+            agColour = vec3(1.0);
+            agAlpha = clamp(agLightSum, 0.0, 1.0) * agCoverage;
+        }
     }
 
     // ---- soft drop shadow --------------------------------------------------
@@ -265,6 +288,7 @@ export const UNIFORMS = [
     'agSheenFresnel',
     'agShadow',
     'agFallbackBlur',
+    'agUseBackdrop',
 ];
 
 /**

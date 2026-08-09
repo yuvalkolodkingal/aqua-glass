@@ -87,6 +87,26 @@ Each is independently toggleable in preferences.
 
 ## The material
 
+### How it is layered
+
+The material is built from two layers, and the split is deliberate:
+
+**1. The surface** — a `St.Widget` carrying `Shell.BlurEffect` in **BACKGROUND**
+mode plus a translucent tint, rounded corners, a hairline rim and a soft drop
+shadow. BACKGROUND blur reads the real framebuffer behind the actor, so it needs
+no copy of the screen, no coordinate arithmetic and no framebuffer of our own.
+This layer alone is already a credible frosted-glass surface.
+
+**2. The light** — the GLSL layer on top, adding the specular highlight, the
+Fresnel rim and the directional sheen. It composites *additively* and samples no
+texture, so if it fails it costs a highlight, not the whole surface.
+
+Edge refraction is the one thing that genuinely needs a live copy of the screen
+inside our own framebuffer, so it is opt-in (**Material → Edge refraction**).
+Earlier versions put the entire appearance behind that copy; when it produced
+nothing, menus rendered with no background at all — text floating on the
+wallpaper. Now the worst case is a surface without lensing.
+
 The shader models the panel as a glass slab whose thickness rises from zero at
 the edge to full over a configurable bevel, following a **spherical-cap
 profile**. That profile is not an aesthetic choice — its derivative reaches

@@ -259,6 +259,11 @@ export class Actor extends Emitter {
         effect._actor = this;
     }
 
+    add_effect_with_name(name, effect) {
+        effect._name = name;
+        this.add_effect(effect);
+    }
+
     remove_effect(effect) {
         const i = this._effects.indexOf(effect);
         if (i >= 0)

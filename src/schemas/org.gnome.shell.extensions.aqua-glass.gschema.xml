@@ -109,6 +109,17 @@
       <range min="-1" max="64"/>
       <summary>Corner radius in pixels; -1 reads the radius from the surface's theme node</summary>
     </key>
+    <key name="base-opacity" type="d">
+      <default>0.22</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Opacity of the glass surface itself, over the blurred backdrop</summary>
+      <description>Kept above a floor at runtime so a surface is never completely invisible.</description>
+    </key>
+    <key name="refraction-3d" type="b">
+      <default>false</default>
+      <summary>Edge refraction (experimental)</summary>
+      <description>Bends the backdrop at the edges like real glass. Needs a live clone of the window group inside its own framebuffer; costs more and is less predictable than the rest of the material.</description>
+    </key>
     <key name="specular-enabled" type="b">
       <default>true</default>
       <summary>Specular highlights (off makes glass read as flat plastic)</summary>

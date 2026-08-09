@@ -155,6 +155,10 @@ export default class AquaGlassPreferences extends ExtensionPreferences {
         base.add(tintRow);
         settings.bind('tint-color', tintRow, 'text', Gio.SettingsBindFlags.DEFAULT);
 
+        this._doubleRow(base, settings, 'base-opacity', 'Surface opacity',
+            'How solid the glass itself is over the blurred backdrop. Held ' +
+            'above a floor at runtime so a surface is never invisible.', 0, 1);
+
         const optics = new Adw.PreferencesGroup({
             title: 'Optics',
             description: 'Refraction is concentrated at the edges; the centre of ' +
@@ -162,6 +166,11 @@ export default class AquaGlassPreferences extends ExtensionPreferences {
                          'bevelled edge does.',
         });
         page.add(optics);
+        this._switchRow(optics, settings, 'refraction-3d',
+            'Edge refraction (experimental)',
+            'Bends the backdrop at the edges like real glass. Needs a live ' +
+            'copy of the screen in its own framebuffer, so it costs more and ' +
+            'is less predictable than the rest of the material.');
         this._doubleRow(optics, settings, 'ior', 'Index of refraction',
             '1.5 is glass. 2.4 would be diamond.', 1.0, 2.0, 0.01);
         this._doubleRow(optics, settings, 'refraction-strength', 'Refraction strength',

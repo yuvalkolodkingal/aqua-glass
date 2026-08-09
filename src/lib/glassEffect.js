@@ -60,6 +60,7 @@ const DEFAULT_PARAMS = {
     shadowRadius: 32,
     shadowOffset: 10,
     fallbackBlur: 0,
+    useBackdrop: false,
 };
 
 export const AquaGlassEffect = GObject.registerClass(
@@ -137,7 +138,7 @@ class AquaGlassEffect extends Shell.GLSLEffect {
         const names = [
             'agLocalOrigin', 'agLocalSize', 'agRect', 'agClip', 'agCorner',
             'agRefr', 'agTint', 'agGrade', 'agLight', 'agSheenFresnel',
-            'agShadow', 'agFallbackBlur',
+            'agShadow', 'agFallbackBlur', 'agUseBackdrop',
         ];
 
         const loc = {};
@@ -309,6 +310,7 @@ class AquaGlassEffect extends Shell.GLSLEffect {
                     p.shadowOpacity, p.shadowRadius, p.shadowOffset,
                 ]);
                 this._set(loc.agFallbackBlur, 1, [p.fallbackBlur]);
+                this._set(loc.agUseBackdrop, 1, [p.useBackdrop ? 1 : 0]);
             }
         } catch (e) {
             Log.error(e, 'paint_target uniforms');

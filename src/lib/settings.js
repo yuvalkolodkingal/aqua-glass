@@ -11,7 +11,7 @@ export const MATERIAL_KEYS = [
     'specular-enabled', 'specular-intensity', 'specular-shininess',
     'chromatic-aberration', 'sheen-intensity', 'fresnel-intensity',
     'shadow-enabled', 'shadow-opacity', 'shadow-radius', 'shadow-offset',
-    'light-angle', 'native-blur',
+    'light-angle', 'native-blur', 'base-opacity', 'refraction-3d',
 ];
 
 /** Keys that turn individual surfaces on and off. */
@@ -67,6 +67,8 @@ export class MaterialParams {
         this.lightVec = lightVector(this.lightAngle);
 
         this.nativeBlur = settings.get_boolean('native-blur');
+        this.baseOpacity = settings.get_double('base-opacity');
+        this.refraction3d = settings.get_boolean('refraction-3d');
     }
 
     /**

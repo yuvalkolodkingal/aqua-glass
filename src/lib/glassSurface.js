@@ -1,33 +1,35 @@
 // Aqua Glass - one glass instance.
 //
-// A GlassSurface owns exactly one AquaGlassEffect and the small actor tree it
-// renders into. Instances are expensive (a framebuffer each), so they are
-// created rarely and RETARGETED often - see retarget(), which allocates
-// nothing.
+// TWO LAYERS, and the split matters.
 //
-// The actor tree, and why it is shaped this way:
+//   root        plain container, monitor-sized at the monitor origin. No effect.
+//     base      St.Widget the size of the glass rectangle. Carries
+//               Shell.BlurEffect in BACKGROUND mode plus a translucent tint,
+//               rounded corners, a hairline border and a soft drop shadow, all
+//               as ordinary St styling.
+//     material  monitor-sized, clipped, carrying the AquaGlassEffect. Adds the
+//               light - specular, Fresnel rim, directional sheen - over the top.
 //
-//   root        Clutter.Actor, positioned at the MONITOR ORIGIN and sized to
-//               the MONITOR (architecture rule 3). Carries the glass effect.
-//               Also carries a clip covering just the glass and its shadow, so
-//               the framebuffer is only as large as the region we actually
-//               draw - the coordinate system is unchanged, only the cost.
-//     clipFrame Clutter.Actor sized to the glass rect plus a sampling margin,
-//               clip_to_allocation. Carries the native blur, which in ACTOR
-//               mode sizes its framebuffers from this actor's allocation - so
-//               blur cost tracks the popup, not the screen.
-//       backdrop Clutter.Clone of global.window_group, shifted so that the
-//               absolute screen coordinates of the real windows land in the
-//               right place inside the framebuffer.
+// Why this way round. BACKGROUND-mode blur reads the real framebuffer behind
+// the actor (shell-blur-effect.c update_actor_box), so it needs no clone, no
+// coordinate arithmetic, and no offscreen framebuffer of our own. It is the
+// mechanism Blur My Shell uses for exactly these surfaces, and it renders even
+// if everything else here fails. The base layer alone is already a credible
+// frosted-glass surface; the shader layer is additive polish on top of it.
 //
-// Cloning global.window_group (rather than assembling per-window clones) is
-// deliberate: layout.js puts the wallpaper's Meta.BackgroundGroup inside
-// window_group and lowers it to the bottom, so a single live clone gives us
-// wallpaper plus every window, already in the correct stacking order, with no
-// per-window bookkeeping and no sampling timer at all.
+// The previous design put the entire appearance behind a Clutter.Clone of
+// global.window_group inside an offscreen framebuffer. If that clone produced
+// nothing, the surface rendered nothing at all - a menu with no background,
+// text floating on the wallpaper. Two things make that fragile:
+// clutter_clone_allocate() SCALES the source to fill the clone's allocation
+// (x_scale = clone_box / source_box), and a Clone takes its size from the
+// source's *preferred* size, which is not the same as the source's allocation.
+// Refraction genuinely needs that clone, so it is still available, but it is
+// now opt-in and it can no longer take the whole surface down with it.
 
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import * as Log from './logger.js';
 import {capabilities} from './compat.js';
@@ -40,6 +42,8 @@ export class GlassSurface {
     constructor(name) {
         this._name = name;
         this._root = null;
+        this._base = null;
+        this._material = null;
         this._clipFrame = null;
         this._backdrop = null;
         this._effect = null;
@@ -47,7 +51,8 @@ export class GlassSurface {
         this._built = false;
         this._destroyed = false;
         this._monitor = null;
-        this._material = null;
+        this._params = null;
+        this._refraction = false;
     }
 
     get name() {
@@ -76,40 +81,42 @@ export class GlassSurface {
                 name: `aqua-glass-${this._name}`,
                 reactive: false,
             });
-            // Belt and braces: even with an explicit clip, never let a child's
-            // paint volume inflate the framebuffer.
-            this._root.set_clip_to_allocation(true);
 
-            this._clipFrame = new Clutter.Actor({
-                name: `aqua-glass-${this._name}-clip`,
+            // ---- layer 1: the surface itself -------------------------------
+            this._base = new St.Widget({
+                name: `aqua-glass-${this._name}-base`,
                 reactive: false,
             });
-            this._clipFrame.set_clip_to_allocation(true);
-
-            this._backdrop = new Clutter.Clone({
-                source: global.window_group,
-                reactive: false,
-            });
-
-            this._clipFrame.add_child(this._backdrop);
-            this._root.add_child(this._clipFrame);
-
-            this._effect = new AquaGlassEffect();
-            this._root.add_effect(this._effect);
+            this._root.add_child(this._base);
 
             if (capabilities().blurEffect) {
                 try {
                     this._blur = new Shell.BlurEffect({
-                        mode: Shell.BlurMode.ACTOR,
+                        // BACKGROUND reads what is actually behind the actor,
+                        // so there is nothing to clone and nothing to align.
+                        mode: Shell.BlurMode.BACKGROUND,
                         brightness: 1.0,
                         radius: 24,
                     });
-                    this._clipFrame.add_effect(this._blur);
+                    // QuickSettings already owns an effect named 'dim' on its
+                    // box pointer, so ours is explicitly namespaced.
+                    this._base.add_effect_with_name('aqua-glass-blur', this._blur);
                 } catch (e) {
-                    Log.error(e, 'add blur effect');
+                    Log.error(e, 'add background blur');
                     this._blur = null;
                 }
             }
+
+            // ---- layer 2: the light ----------------------------------------
+            this._material = new Clutter.Actor({
+                name: `aqua-glass-${this._name}-material`,
+                reactive: false,
+            });
+            this._material.set_clip_to_allocation(true);
+            this._root.add_child(this._material);
+
+            this._effect = new AquaGlassEffect();
+            this._material.add_effect_with_name('aqua-glass-material', this._effect);
 
             this._root.hide();
             this._built = true;
@@ -122,48 +129,125 @@ export class GlassSurface {
     }
 
     /**
+     * Turn refraction on or off.
+     *
+     * Refraction has to sample the backdrop, which means a live clone of
+     * global.window_group inside our own framebuffer. Everything else works
+     * without it.
+     *
+     * @param {boolean} enabled whether to build and use the clone
+     */
+    setRefraction(enabled) {
+        if (!this.isBuilt || this._refraction === !!enabled)
+            return;
+        this._refraction = !!enabled;
+
+        if (!this._refraction) {
+            try {
+                if (this._clipFrame)
+                    this._clipFrame.destroy();
+            } catch { /* ignore */ }
+            this._clipFrame = null;
+            this._backdrop = null;
+            this._effect?.setParams({useBackdrop: false});
+            return;
+        }
+
+        try {
+            this._clipFrame = new Clutter.Actor({
+                name: `aqua-glass-${this._name}-clip`,
+                reactive: false,
+            });
+            this._clipFrame.set_clip_to_allocation(true);
+
+            this._backdrop = new Clutter.Clone({
+                source: global.window_group,
+                reactive: false,
+            });
+            this._syncCloneSize();
+
+            this._clipFrame.add_child(this._backdrop);
+            this._material.add_child(this._clipFrame);
+            this._effect.setParams({useBackdrop: true});
+        } catch (e) {
+            Log.error(e, `GlassSurface(${this._name}).setRefraction`);
+            this._refraction = false;
+            this._effect?.setParams({useBackdrop: false});
+        }
+    }
+
+    /**
+     * Pin the clone to the source's ALLOCATION size.
+     *
+     * clutter_clone_allocate() computes
+     *     x_scale = clone_allocation_width / source_allocation_width
+     * and scales everything the source paints by it. A Clone's default
+     * preferred size is the source's *preferred* size, which for
+     * global.window_group is the union of its children's preferred sizes - not
+     * its allocation. Left alone, the backdrop is silently drawn at the wrong
+     * scale, and if the source has not been allocated yet the ratio is a
+     * division by zero. Forcing the sizes equal makes the scale exactly 1.
+     */
+    _syncCloneSize() {
+        if (!this._backdrop)
+            return;
+        try {
+            const box = global.window_group.get_allocation_box();
+            const w = box.get_width();
+            const h = box.get_height();
+            if (w > 0 && h > 0)
+                this._backdrop.set_size(w, h);
+        } catch (e) {
+            Log.debug(`clone size sync: ${e}`);
+        }
+    }
+
+    /**
      * Apply material settings.
      *
      * @param {object} material a MaterialParams object from settings.js
      */
     setMaterial(material) {
-        this._material = material;
-        if (!this._effect)
+        this._params = material;
+        if (!this.isBuilt)
             return;
 
-        const useNative = !!this._blur && material.nativeBlur;
+        this.setRefraction(material.refraction3d);
 
-        this._effect.setParams({
-            cornerRadius: material.cornerRadius,
-            bevelWidth: material.bevelWidth,
-            ior: material.ior,
-            refraction: material.refraction,
-            chromatic: material.chromatic,
-            tint: material.tint,
-            saturation: material.saturation,
-            brightness: material.brightness,
-            lightVec: material.lightVec,
-            specular: material.specularEnabled ? material.specular : 0,
-            shininess: material.shininess,
-            sheen: material.sheen,
-            fresnel: material.fresnel,
-            shadowOpacity: material.shadowEnabled ? material.shadowOpacity : 0,
-            shadowRadius: material.shadowRadius,
-            shadowOffset: material.shadowOffset,
-            // If the native blur is unavailable the shader does its own, which
-            // is why this is a uniform rather than a compile-time branch: the
-            // pipeline is built once per class and cannot be rebuilt.
-            fallbackBlur: useNative ? 0 : material.blurSigma,
-        });
+        const useNative = !!this._blur;
+
+        if (this._effect) {
+            this._effect.setParams({
+                cornerRadius: material.cornerRadius,
+                bevelWidth: material.bevelWidth,
+                ior: material.ior,
+                refraction: material.refraction,
+                chromatic: material.chromatic,
+                tint: material.tint,
+                saturation: material.saturation,
+                brightness: material.brightness,
+                lightVec: material.lightVec,
+                specular: material.specularEnabled ? material.specular : 0,
+                shininess: material.shininess,
+                sheen: material.sheen,
+                fresnel: material.fresnel,
+                // The base layer draws the drop shadow with a real box-shadow,
+                // so the shader must not draw a second one on top of it.
+                shadowOpacity: 0,
+                shadowRadius: material.shadowRadius,
+                shadowOffset: material.shadowOffset,
+                fallbackBlur: (this._refraction && !useNative) ? material.blurSigma : 0,
+                useBackdrop: this._refraction,
+            });
+        }
 
         if (this._blur) {
             try {
                 // ShellBlurEffect's `radius` is passed straight through as the
-                // Gaussian sigma (clutter_blur_node_new -> ClutterBlur sigma).
-                // Identical property in 48, 49 and 50 - there is no `sigma`
-                // property to prefer.
+                // Gaussian sigma. Identical in 48, 49 and 50; there is no
+                // `sigma` property to prefer.
                 const sigma = Math.max(0, Math.round(material.blurSigma));
-                this._blur.enabled = useNative && sigma > 0;
+                this._blur.enabled = sigma > 0;
                 if (sigma > 0)
                     this._blur.radius = sigma;
             } catch (e) {
@@ -173,12 +257,41 @@ export class GlassSurface {
     }
 
     /**
+     * The base layer's styling: the part of the material that St can draw
+     * directly, and therefore the part that always survives.
+     *
+     * @param {number} radius corner radius in pixels
+     * @returns {string} inline CSS
+     */
+    _baseStyle(radius) {
+        const m = this._params;
+        const [r, g, b] = m ? m.tint : [1, 1, 1];
+        const to255 = v => Math.round(Math.max(0, Math.min(1, v)) * 255);
+
+        // A floor under the tint alpha. Without it a "subtle" setting plus a
+        // blur that did not load leaves text floating on bare wallpaper.
+        const alpha = m ? Math.max(0.10, Math.min(0.55, m.baseOpacity)) : 0.22;
+
+        const shadowAlpha = m && m.shadowEnabled ? m.shadowOpacity : 0;
+        const shadowBlur = m ? m.shadowRadius : 32;
+        const shadowY = m ? Math.round(m.shadowOffset * 0.6) : 6;
+
+        return [
+            `background-color: rgba(${to255(r)}, ${to255(g)}, ${to255(b)}, ${alpha.toFixed(3)});`,
+            `border-radius: ${Math.max(0, Math.round(radius))}px;`,
+            // A hairline lighter edge is what reads as a physical rim.
+            'border: 1px solid rgba(255, 255, 255, 0.16);',
+            shadowAlpha > 0
+                ? `box-shadow: 0 ${shadowY}px ${Math.round(shadowBlur)}px rgba(0, 0, 0, ${shadowAlpha.toFixed(3)});`
+                : '',
+        ].join(' ');
+    }
+
+    /**
      * Point this glass at a new place on screen.
      *
-     * This is the hot path for transient popups, and it must not allocate: no
-     * new actors, no new effects, no new framebuffers. Only positions, sizes
-     * and uniform values change. That is the whole reason a single shared
-     * instance can serve every popup in the shell.
+     * Must not allocate: no new actors, no new effects, no new framebuffers.
+     * Only positions, sizes, styles and uniform values change.
      *
      * @param {object} monitor monitor geometry {x, y, width, height}
      * @param {object} rect glass rectangle in ABSOLUTE stage coordinates
@@ -192,57 +305,59 @@ export class GlassSurface {
             return false;
 
         try {
-            const m = this._material;
-
-            // How far outside the glass we must have real backdrop pixels:
-            // enough for the blur kernel to be fully populated, plus the
-            // furthest a refracted ray can reach.
-            const sampleMargin = m
-                ? Math.ceil(3 * m.blurSigma + 2.5 * m.refraction * m.bevelWidth + 8)
-                : 96;
-
-            // How far outside the glass we actually draw: the shadow.
-            const shadowMargin = m && m.shadowEnabled
-                ? Math.ceil(m.shadowRadius + m.shadowOffset + 4)
-                : 8;
-
+            const m = this._params;
             const localX = rect.x - monitor.x;
             const localY = rect.y - monitor.y;
 
-            // --- backdrop sampling frame (monitor-local, clamped) ---
-            const sx = Math.max(0, Math.floor(localX - sampleMargin));
-            const sy = Math.max(0, Math.floor(localY - sampleMargin));
-            const sx2 = Math.min(monitor.width, Math.ceil(localX + rect.width + sampleMargin));
-            const sy2 = Math.min(monitor.height, Math.ceil(localY + rect.height + sampleMargin));
-            const sw = Math.max(1, sx2 - sx);
-            const sh = Math.max(1, sy2 - sy);
-
-            // --- render clip (monitor-local, clamped) ---
-            const rx = Math.max(0, Math.floor(localX - shadowMargin));
-            const ry = Math.max(0, Math.floor(localY - shadowMargin));
-            const rx2 = Math.min(monitor.width, Math.ceil(localX + rect.width + shadowMargin));
-            const ry2 = Math.min(monitor.height, Math.ceil(localY + rect.height + shadowMargin));
-            const rw = Math.max(1, rx2 - rx);
-            const rh = Math.max(1, ry2 - ry);
-
-            // Rule 3: the effect actor covers the monitor, at the monitor
-            // origin. Never the popup's own size.
+            // Container: monitor-sized, at the monitor origin (rule 3).
             this._root.set_position(monitor.x, monitor.y);
             this._root.set_size(monitor.width, monitor.height);
-            this._root.set_clip(rx, ry, rw, rh);
 
-            this._clipFrame.set_position(sx, sy);
-            this._clipFrame.set_size(sw, sh);
+            // Layer 1 sits exactly on the surface.
+            this._base.set_position(localX, localY);
+            this._base.set_size(rect.width, rect.height);
+            this._base.set_style(this._baseStyle(cornerRadius));
 
-            // Rule 3 again: shift the clone so that absolute screen
-            // coordinates land correctly inside the framebuffer. The clone's
-            // local origin sits at absolute (monitor.x + sx, monitor.y + sy).
-            this._backdrop.set_position(-(monitor.x + sx), -(monitor.y + sy));
+            // Layer 2 keeps the monitor-sized frame the shader's coordinate
+            // model is written against, clipped to the drawn region so the
+            // framebuffer stays small.
+            const margin = m && m.shadowEnabled
+                ? Math.ceil(m.shadowRadius + m.shadowOffset + 4)
+                : 8;
+            const rx = Math.max(0, Math.floor(localX - margin));
+            const ry = Math.max(0, Math.floor(localY - margin));
+            const rx2 = Math.min(monitor.width, Math.ceil(localX + rect.width + margin));
+            const ry2 = Math.min(monitor.height, Math.ceil(localY + rect.height + margin));
+
+            this._material.set_position(0, 0);
+            this._material.set_size(monitor.width, monitor.height);
+            this._material.set_clip(rx, ry, Math.max(1, rx2 - rx), Math.max(1, ry2 - ry));
+
+            // Backdrop sampling frame, only when refraction is on.
+            let clip = [rx, ry, Math.max(1, rx2 - rx), Math.max(1, ry2 - ry)];
+            if (this._refraction && this._clipFrame) {
+                const sample = m
+                    ? Math.ceil(3 * m.blurSigma + 2.5 * m.refraction * m.bevelWidth + 8)
+                    : 96;
+                const sx = Math.max(0, Math.floor(localX - sample));
+                const sy = Math.max(0, Math.floor(localY - sample));
+                const sx2 = Math.min(monitor.width, Math.ceil(localX + rect.width + sample));
+                const sy2 = Math.min(monitor.height, Math.ceil(localY + rect.height + sample));
+                const sw = Math.max(1, sx2 - sx);
+                const sh = Math.max(1, sy2 - sy);
+
+                this._clipFrame.set_position(sx, sy);
+                this._clipFrame.set_size(sw, sh);
+
+                // Shift the clone so absolute screen coordinates land in the
+                // right place: its local origin is at (monitor.x + sx, ...).
+                this._syncCloneSize();
+                this._backdrop.set_position(-(monitor.x + sx), -(monitor.y + sy));
+                clip = [sx, sy, sw, sh];
+            }
 
             this._effect.setGeometry(
-                [localX, localY, rect.width, rect.height],
-                [sx, sy, sw, sh],
-                cornerRadius);
+                [localX, localY, rect.width, rect.height], clip, cornerRadius);
 
             this._monitor = monitor;
             return true;
@@ -323,22 +438,13 @@ export class GlassSurface {
         if (!this.isBuilt)
             return 0;
         try {
-            let w = 0;
-            let h = 0;
-            if (this._root.has_clip()) {
-                const [, , cw, ch] = this._root.get_clip();
-                w = cw;
-                h = ch;
-            } else {
-                w = this._root.width;
-                h = this._root.height;
+            let bytes = 0;
+            if (this._material.has_clip()) {
+                const [, , cw, ch] = this._material.get_clip();
+                bytes += Math.max(0, (cw + 3) * (ch + 3) * 4);
             }
-            let bytes = Math.max(0, (w + 3) * (h + 3) * 4);
-            if (this._blur && this._blur.enabled) {
-                // Two working framebuffers plus the source copy, over the
-                // clip frame's area.
-                bytes += this._clipFrame.width * this._clipFrame.height * 4 * 3;
-            }
+            if (this._blur && this._blur.enabled)
+                bytes += this._base.width * this._base.height * 4 * 3;
             return Math.round(bytes);
         } catch {
             return 0;
@@ -347,14 +453,14 @@ export class GlassSurface {
 
     _teardownActors() {
         try {
-            if (this._blur && this._clipFrame)
-                this._clipFrame.remove_effect(this._blur);
+            if (this._blur && this._base)
+                this._base.remove_effect(this._blur);
         } catch { /* ignore */ }
         this._blur = null;
 
         try {
-            if (this._effect && this._root)
-                this._root.remove_effect(this._effect);
+            if (this._effect && this._material)
+                this._material.remove_effect(this._effect);
         } catch { /* ignore */ }
 
         if (this._effect) {
@@ -364,13 +470,14 @@ export class GlassSurface {
         }
         this._effect = null;
 
-        // Destroying the root destroys the clip frame and the clone with it.
         try {
             if (this._root)
                 this._root.destroy();
         } catch { /* ignore */ }
 
         this._root = null;
+        this._base = null;
+        this._material = null;
         this._clipFrame = null;
         this._backdrop = null;
     }
@@ -394,8 +501,9 @@ export class GlassSurface {
                 geometry = {
                     pos: `${Math.round(this._root.x)},${Math.round(this._root.y)}`,
                     size: `${Math.round(this._root.width)}x${Math.round(this._root.height)}`,
-                    clip: this._root.has_clip()
-                        ? this._root.get_clip().map(Math.round).join(',')
+                    base: this._base
+                        ? `${Math.round(this._base.x)},${Math.round(this._base.y)} ` +
+                          `${Math.round(this._base.width)}x${Math.round(this._base.height)}`
                         : 'none',
                     parented: !!this._root.get_parent(),
                     opacity: this._root.opacity,
@@ -408,10 +516,9 @@ export class GlassSurface {
             built: this.isBuilt,
             visible: this.visible,
             nativeBlur: !!this._blur && !!this._blur.enabled,
+            refraction: this._refraction,
             bytes: this.estimatedBytes(),
             geometry,
-            // What the shader was last handed. If the glass looks wrong, this
-            // says whether the geometry or the shader is at fault.
             mapping: this._effect?._lastMapping ?? null,
             monitor: this._monitor
                 ? `${this._monitor.width}x${this._monitor.height}+${this._monitor.x}+${this._monitor.y}`

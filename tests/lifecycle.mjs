@@ -81,9 +81,27 @@ if (panelGlass) {
         panelGlass.width === 1920 && panelGlass.height === 1080 &&
         panelGlass.x === 0 && panelGlass.y === 0,
         `${panelGlass.width}x${panelGlass.height}+${panelGlass.x}+${panelGlass.y}`);
-    check('panel glass is clipped to the drawn region, not the whole monitor',
-        panelGlass.has_clip() && panelGlass.get_clip()[3] < 1080,
-        `clip=${panelGlass.get_clip().join(',')}`);
+    const material = panelGlass.get_children()
+        .find(c => c.get_name().endsWith('-material'));
+    check('the material layer is clipped to the drawn region, not the monitor',
+        !!material && material.has_clip() && material.get_clip()[3] < 1080,
+        material ? `clip=${material.get_clip().join(',')}` : 'no material layer');
+
+    // The base layer is what guarantees a surface exists even if the shader or
+    // the backdrop never render. Text floating on bare wallpaper is the exact
+    // failure this asserts against.
+    const base = panelGlass.get_children()
+        .find(c => c.get_name().endsWith('-base'));
+    check('a base layer exists and is sized to the surface',
+        !!base && base.width === 1920 && base.height === 32,
+        base ? `${base.width}x${base.height}` : 'no base layer');
+    check('the base layer paints a visible translucent background',
+        !!base && /background-color:\s*rgba\([^)]*0\.\d+\)/.test(base.get_style() || ''),
+        base ? `style=${base.get_style()}` : 'n/a');
+    check('the base layer has rounded corners and a rim',
+        !!base && /border-radius/.test(base.get_style() || '') &&
+        /border:\s*1px/.test(base.get_style() || ''));
+
     check('panel glass is non-reactive so it cannot swallow clicks',
         panelGlass.reactive === false);
     check('panel glass is visible', panelGlass.visible === true);
