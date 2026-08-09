@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="aqua-glass">
+
+  <enum id="org.gnome.shell.extensions.aqua-glass.TextMode">
+    <value nick="auto"  value="0"/>
+    <value nick="light" value="1"/>
+    <value nick="dark"  value="2"/>
+  </enum>
+
+  <schema id="org.gnome.shell.extensions.aqua-glass"
+          path="/org/gnome/shell/extensions/aqua-glass/">
+
+    <!-- ==================== Surfaces ==================== -->
+    <key name="surface-panel" type="b">
+      <default>true</default>
+      <summary>Glass on the top panel</summary>
+    </key>
+    <key name="surface-panel-menus" type="b">
+      <default>true</default>
+      <summary>Glass on panel status-area menus</summary>
+    </key>
+    <key name="surface-date-menu" type="b">
+      <default>true</default>
+      <summary>Glass on the date/calendar menu</summary>
+    </key>
+    <key name="surface-quick-settings" type="b">
+      <default>true</default>
+      <summary>Glass on Quick Settings</summary>
+    </key>
+    <key name="surface-notifications" type="b">
+      <default>true</default>
+      <summary>Glass on notification banners</summary>
+    </key>
+    <key name="surface-osd" type="b">
+      <default>true</default>
+      <summary>Glass on OSD popups</summary>
+    </key>
+    <key name="surface-dash-to-dock" type="b">
+      <default>true</default>
+      <summary>Glass on Dash to Dock</summary>
+    </key>
+    <key name="surface-context-menus" type="b">
+      <default>true</default>
+      <summary>Glass on right-click/context menus</summary>
+    </key>
+    <key name="surface-window-menus" type="b">
+      <default>true</default>
+      <summary>Glass on window menus</summary>
+    </key>
+    <key name="surface-input-switcher" type="b">
+      <default>true</default>
+      <summary>Glass on the language/input-source switcher</summary>
+    </key>
+    <key name="surface-alt-tab" type="b">
+      <default>true</default>
+      <summary>Glass on Alt-Tab</summary>
+    </key>
+    <key name="surface-ibus-candidate" type="b">
+      <default>true</default>
+      <summary>Glass on the IBus candidate popup</summary>
+    </key>
+    <key name="surface-workspace-switcher" type="b">
+      <default>true</default>
+      <summary>Glass on the workspace switcher</summary>
+    </key>
+
+    <!-- ==================== Material ==================== -->
+    <key name="blur-sigma" type="i">
+      <default>24</default>
+      <range min="0" max="64"/>
+      <summary>Gaussian sigma of the backdrop blur, in pixels</summary>
+    </key>
+    <key name="tint-color" type="s">
+      <default>'#ffffff'</default>
+      <summary>Glass tint colour (hex)</summary>
+    </key>
+    <key name="tint-strength" type="d">
+      <default>0.10</default>
+      <range min="0.0" max="1.0"/>
+      <summary>How strongly the tint is mixed into the backdrop</summary>
+    </key>
+    <key name="saturation" type="d">
+      <default>1.15</default>
+      <range min="0.0" max="2.0"/>
+      <summary>Backdrop saturation multiplier</summary>
+    </key>
+    <key name="brightness" type="d">
+      <default>1.02</default>
+      <range min="0.5" max="1.5"/>
+      <summary>Backdrop brightness multiplier</summary>
+    </key>
+    <key name="ior" type="d">
+      <default>1.50</default>
+      <range min="1.0" max="2.0"/>
+      <summary>Index of refraction (1.5 = glass; 2.4 would be diamond)</summary>
+    </key>
+    <key name="refraction-strength" type="d">
+      <default>0.55</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Refraction displacement strength</summary>
+    </key>
+    <key name="bevel-width" type="i">
+      <default>22</default>
+      <range min="2" max="80"/>
+      <summary>Width of the refracting edge bevel, in pixels; the centre stays undistorted</summary>
+    </key>
+    <key name="corner-radius" type="i">
+      <default>-1</default>
+      <range min="-1" max="64"/>
+      <summary>Corner radius in pixels; -1 reads the radius from the surface's theme node</summary>
+    </key>
+    <key name="specular-enabled" type="b">
+      <default>true</default>
+      <summary>Specular highlights (off makes glass read as flat plastic)</summary>
+    </key>
+    <key name="specular-intensity" type="d">
+      <default>0.55</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Specular highlight intensity</summary>
+    </key>
+    <key name="specular-shininess" type="d">
+      <default>48.0</default>
+      <range min="4.0" max="256.0"/>
+      <summary>Specular exponent; higher is tighter</summary>
+    </key>
+    <key name="chromatic-aberration" type="d">
+      <default>0.30</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Edge-only chromatic aberration amount</summary>
+    </key>
+    <key name="sheen-intensity" type="d">
+      <default>0.35</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Directional sheen gradient intensity</summary>
+    </key>
+    <key name="fresnel-intensity" type="d">
+      <default>0.45</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Fresnel rim-light intensity</summary>
+    </key>
+    <key name="shadow-enabled" type="b">
+      <default>true</default>
+      <summary>Soft drop shadow under the glass</summary>
+    </key>
+    <key name="shadow-opacity" type="d">
+      <default>0.28</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Drop shadow opacity</summary>
+    </key>
+    <key name="shadow-radius" type="i">
+      <default>32</default>
+      <range min="0" max="80"/>
+      <summary>Drop shadow softness radius, in pixels</summary>
+    </key>
+    <key name="shadow-offset" type="i">
+      <default>10</default>
+      <range min="0" max="40"/>
+      <summary>Drop shadow offset away from the light, in pixels</summary>
+    </key>
+    <key name="light-angle" type="i">
+      <default>315</default>
+      <range min="0" max="359"/>
+      <summary>Light direction in degrees; 0 is from the top, increasing clockwise. Drives specular, rim and shadow together.</summary>
+    </key>
+
+    <!-- ==================== Adaptive text ==================== -->
+    <key name="adaptive-text" type="b">
+      <default>true</default>
+      <summary>Adapt text colour to the backdrop behind the glass</summary>
+    </key>
+    <key name="text-mode" enum="org.gnome.shell.extensions.aqua-glass.TextMode">
+      <default>'auto'</default>
+      <summary>Force light or dark text instead of measuring</summary>
+    </key>
+    <key name="text-threshold" type="d">
+      <default>0.179</default>
+      <range min="0.0" max="1.0"/>
+      <summary>WCAG relative-luminance threshold for switching to dark text. 0.179 is the crossover where black and white text are equally legible.</summary>
+    </key>
+    <key name="text-hysteresis" type="d">
+      <default>0.08</default>
+      <range min="0.0" max="0.5"/>
+      <summary>Total width of the dead band around the threshold, to stop borderline backdrops oscillating</summary>
+    </key>
+    <key name="text-shadow" type="b">
+      <default>true</default>
+      <summary>Add a matched text shadow under adapted text</summary>
+    </key>
+    <key name="fix-accent-contrast" type="b">
+      <default>true</default>
+      <summary>Darken accent-coloured chips that fail WCAG AA against their label</summary>
+    </key>
+
+    <!-- ==================== Integration ==================== -->
+    <key name="manage-blur-my-shell" type="b">
+      <default>true</default>
+      <summary>Offer to disable overlapping Blur My Shell components</summary>
+    </key>
+    <key name="manage-dash-to-dock" type="b">
+      <default>true</default>
+      <summary>Neutralise Dash to Dock's own background so it does not fade over the glass</summary>
+    </key>
+    <key name="blur-my-shell-backup" type="s">
+      <default>''</default>
+      <summary>JSON backup of Blur My Shell keys we changed, for a clean revert</summary>
+    </key>
+    <key name="dash-to-dock-backup" type="s">
+      <default>''</default>
+      <summary>JSON backup of Dash to Dock keys we changed, for a clean revert</summary>
+    </key>
+
+    <!-- ==================== Performance / behaviour ==================== -->
+    <key name="native-blur" type="b">
+      <default>true</default>
+      <summary>Use the shell's native Gaussian blur; falls back to an in-shader blur if unavailable</summary>
+    </key>
+    <key name="min-refresh-interval" type="i">
+      <default>350</default>
+      <range min="100" max="5000"/>
+      <summary>Hard minimum interval between geometry refreshes of always-visible surfaces, in ms</summary>
+    </key>
+    <key name="hide-in-overview" type="b">
+      <default>true</default>
+      <summary>Hide panel glass while the Activities overview is open</summary>
+    </key>
+    <key name="debug-logging" type="b">
+      <default>false</default>
+      <summary>Verbose logging to the journal</summary>
+    </key>
+  </schema>
+</schemalist>
